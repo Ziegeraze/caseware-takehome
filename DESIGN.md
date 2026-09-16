@@ -89,7 +89,6 @@ X", it is "this user declined while reading *this* text".
 | Fan-out + backfill workers | ECS Fargate consumers sharing one concurrency limiter | Downstream capacity is the scarce resource, so it is one knob, not per-service tuning |
 | Summaries | S3 with Object Lock, metadata in DynamoDB, generation via Bedrock with a pinned model id | WORM storage is what makes November defensible |
 
-
 ## 2. Version semantics: pending, declined, withdrawn
 
 Versions form a **DAG**, not a line, so pending is an **ancestry** test, never a numeric comparison:
@@ -180,10 +179,10 @@ indicator. Rollback = flip the flag; the projection keeps building.
 | Projection storage | 800k small rows                                                                                        | tens of dollars                                            |
 | Backfill (one-off) | 13,333 h of downstream compute, ~20 concurrent for a month                                             | one-off, dominated by the other team's capacity, not by us |
 
-Two things to notice. First, **the unit of summarisation is the version pair, not the engagement**: per
-engagement the same work would be 800,000 × $0.165 ≈ **$136,000 per round**, so the 100× reduction exists
-only because template content is not firm-specific. Second, **cost is dominated by input tokens**, so the
-cheapest lever is diff size, not call count.
+Two things to notice. First, **the unit of summarisation is the version pair, not the engagement**:
+per-engagement summaries would be 172 publishes × 20,000 engagements × $0.165 ≈ **$568,000/month** — a
+**1,000×** difference, and it exists only because template content is not firm-specific. Second, **cost is
+dominated by input tokens**, so the cheapest lever is diff size, not call count.
 
 **Against the `$X` budget.** Steady state is **~$700/month all-in** — inference ~$570, projection storage
 and event bus the rest — so inference is ~80% of the bill and the feature fits any budget from ~$1k/month
@@ -218,6 +217,10 @@ Validation, all automatic, all pre-publication:
 - **Regression**: a golden set of human-reviewed diff→summary pairs gated on every prompt or model change.
 - The technical diff is always one click away as the fallback.
 
+A summary's id is deterministic — it is the `(template_id, from_version, to_version)` triple — so the
+fan-out records the pointer without waiting for generation, and the UI renders "Summary in preparation"
+until the object exists.
+
 **Human review is moved before publish, not into the request path.** The content team already understands
 the change it is shipping, so the adjacent-jump summary (v6→v7) is generated and approved inside the
 publish workflow — summaries exist before the event fires and the 5-minute SLO is untouched. Composite
@@ -250,7 +253,7 @@ retention (assumed 7 years): no summary or decision is deleted while an engageme
 | Precomputed projection              | Load engagements on read       | ms instead of 14 days per publish               | Can go stale; reconciliation required |
 | Thin events + reconciliation        | Ordered, self-contained events | Immune to loss, duplication, reordering         | Extra read of the template DB         |
 | Decline pins a version (honest)     | Decline pins a change set      | Summary never promises what apply can't deliver | Users re-see evaluated changes        |
-| Summary per version pair            | Per engagement/firm            | ~$570 vs ~$136,000                              | No firm-specific personalisation      |
+| Summary per version pair            | Per engagement/firm            | ~$570 vs ~$568,000 per month                    | No firm-specific personalisation      |
 | Three-state indicator               | Binary                         | Never asserts a falsehood                       | One more state to explain in the UI   |
 | Human review only for HIGH severity | Review everything              | ~80 reviews/day is not a job we can staff       | Some summaries reach users unreviewed |
 
@@ -271,5 +274,5 @@ cannot afford to reconcile at full sweep (§3).
 cumulative templates and with what apply can deliver — a product decision, not a patch); email/push
 channels (the in-list indicator covers the use case, and a weekly change does not justify one);
 multi-language summaries (market-specific content means this is coming, but not in v1); firm-specific
-personalisation (it would destroy the 100× cost reduction); automatic application (out of scope, and it
+personalisation (it would destroy the 1,000× cost reduction); automatic application (out of scope, and it
 removes the professional judgement the product exists to support).

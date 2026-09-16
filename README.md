@@ -2,12 +2,12 @@
 
 | Deliverable | Location |
 |---|---|
-| 1. Design document | [`DESIGN.md`](DESIGN.md) |
+| 1. Design document | [`DESIGN.md`](DESIGN.md) · [PDF](Caseware-Design-Document.pdf) |
 | 2. Part 2 implementation + README | [`part2-fanout-worker/`](part2-fanout-worker/) · [README](part2-fanout-worker/README.md) |
-| 4. Diagrams | ASCII, inline in `DESIGN.md` (architecture / residency, version DAG, worker flow) |
+| 4. Diagrams | ASCII, inline: architecture and data residency + version DAG in `DESIGN.md`, worker flow in the Part 2 README |
 
 ```bash
-cd part2-fanout-worker && mvn test    # 10 tests, Java 17, JUnit 5 only
+cd part2-fanout-worker && mvn test    # 10 tests, JUnit 5 only; requires JDK 17+
 ```
 
 ## Reading order
@@ -19,9 +19,16 @@ cd part2-fanout-worker && mvn test    # 10 tests, Java 17, JUnit 5 only
 
 ## Note on AI usage
 
-This submission was produced with Claude as a working partner, used as a reviewer rather than an author:
-the exercise was worked through as a sequence of questions (arithmetic, residency classification,
-decline semantics, event-delivery failure modes, LLM evaluation), with each answer challenged before it
-went into the document. Places where the AI's first framing was corrected, and the things it should not
-be trusted with in this domain, are discussed in `DESIGN.md` §5 (code owns facts, the model owns prose)
-and are available as the full session transcript on request.
+Produced with Claude Code, in dialogue rather than by prompt-and-paste. The problem was worked in stages
+— arithmetic, then data residency, then decline semantics, then event-delivery failure modes, then LLM
+evaluation — with each conclusion argued before it was accepted, and the prose drafted from those
+conclusions and reviewed afterwards.
+
+Two observations that are worth more than the usage itself, and that I am happy to go into during the
+review. First, AI-drafted arithmetic has to be verified: one multiplication in §4 was wrong until a
+manual check caught it — the same failure class that §5 of the design deliberately engineers against
+(code owns facts; the model owns prose). Second, the most valuable output was not the prose but the
+adversarial questions: the design changed shape twice under them, once on which data may cross a region
+boundary and once on what "declined" actually pins.
+
+Full session transcript available on request.
