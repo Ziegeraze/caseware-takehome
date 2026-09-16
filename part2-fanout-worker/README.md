@@ -4,7 +4,7 @@
 mvn test
 ```
 
-Java 11, JUnit 5, no other dependencies. 10 tests, ~1s.
+Requires JDK 17+. Java 17 (records, switch expressions), JUnit 5, no other dependencies. 10 tests, ~1s.
 Entry point: [`TemplatePublishFanoutWorker.process(PublishEvent)`](src/main/java/com/caseware/updates/fanout/TemplatePublishFanoutWorker.java).
 
 ## What it does
@@ -84,7 +84,8 @@ decline/apply path, the backfill scheduler that shares this limiter, and a distr
 only one worker owns a given event. All are named in the design doc; none change these contracts.
 
 `Metrics` is a port rather than a vendor SDK, and `Clock` and `Sleeper` are injected so retry policy is
-testable without real backoff.
+testable without real backoff. The domain types are records: they are values, and immutability is what
+makes them safe to hand to the worker pool.
 
 ## Tests
 

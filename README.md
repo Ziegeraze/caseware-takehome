@@ -7,7 +7,7 @@
 | 4. Diagrams | ASCII, inline in `DESIGN.md` (architecture / residency, version DAG, worker flow) |
 
 ```bash
-cd part2-fanout-worker && mvn test    # 10 tests, Java 11, JUnit 5 only
+cd part2-fanout-worker && mvn test    # 10 tests, Java 17, JUnit 5 only
 ```
 
 ## Reading order

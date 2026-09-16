@@ -165,43 +165,49 @@ public final class TemplatePublishFanoutWorker implements AutoCloseable {
         job.scanned.incrementAndGet();
         PublishEvent event = job.event;
 
-        Action action = classify(row, event);
-        if (action == Action.SKIP_ARCHIVED) {
-            job.skippedArchived.incrementAndGet();
-            return;
+        switch (classify(row, event)) {
+            case SKIP_ARCHIVED -> job.skippedArchived.incrementAndGet();
+            case ALREADY_CURRENT -> job.alreadyCurrent.incrementAndGet();
+            case OUT_OF_LINEAGE -> job.notInLineage.incrementAndGet();
+            case MARK_PENDING -> claimThen(row, job, key -> markPendingOrDeadLetter(row, job, key));
+            case NEEDS_VERIFICATION -> claimThen(row, job, key -> submitVerification(row, job, key, inFlight));
         }
-        if (action == Action.ALREADY_CURRENT) {
-            job.alreadyCurrent.incrementAndGet();
-            return;
-        }
-        if (action == Action.OUT_OF_LINEAGE) {
-            job.notInLineage.incrementAndGet();
-            return;
-        }
+    }
 
-        // Claim before doing anything observable: a duplicate delivery must not re-notify a user and must
-        // not spend a second minute of another team's capacity.
-        String key = idempotencyKey(event, row.engagementId());
+    /**
+     * Claims {@code (eventId, engagementId)} before anything observable happens, so a duplicate delivery
+     * neither re-notifies a user nor spends a second minute of another team's capacity.
+     */
+    private void claimThen(EngagementRow row, Job job, ClaimedWork work) throws InterruptedException {
+        String key = idempotencyKey(job.event, row.engagementId());
         if (!idempotency.tryClaim(key)) {
             job.duplicatesSuppressed.incrementAndGet();
             metrics.increment("fanout.duplicate_suppressed");
             return;
         }
+        work.run(key);
+    }
 
-        if (action == Action.MARK_PENDING) {
-            try {
-                markPending(row.engagementId(), row.appliedVersion(), job);
-                idempotency.markCompleted(key);
-            } catch (RuntimeException e) {
-                idempotency.release(key);
-                job.deadLettered.incrementAndGet();
-                deadLetters.record(row.engagementId(), event, "projection write failed", e);
-                metrics.increment("fanout.projection_write_failed");
-            }
-            return;
+    /** Work that has already taken an idempotency claim and owns its lifecycle. */
+    private interface ClaimedWork {
+        void run(String idempotencyKey) throws InterruptedException;
+    }
+
+    private void markPendingOrDeadLetter(EngagementRow row, Job job, String key) {
+        try {
+            markPending(row.engagementId(), row.appliedVersion(), job);
+            idempotency.markCompleted(key);
+        } catch (RuntimeException e) {
+            idempotency.release(key);
+            job.deadLettered.incrementAndGet();
+            deadLetters.record(row.engagementId(), job.event, "projection write failed", e);
+            metrics.increment("fanout.projection_write_failed");
         }
+    }
 
-        // NEEDS_VERIFICATION: the expensive path. Guarded by breaker, budget, then a permit.
+    /** The expensive path, guarded in order by breaker, per-job budget, then a concurrency permit. */
+    private void submitVerification(EngagementRow row, Job job, String key, List<Future<?>> inFlight)
+            throws InterruptedException {
         if (job.breakerOpen(config.circuitBreakerThreshold())) {
             defer(job, key, "circuit_breaker_open");
             return;
@@ -255,15 +261,9 @@ public final class TemplatePublishFanoutWorker implements AutoCloseable {
                     row.archived());
 
             switch (classify(confirmed, event)) {
-                case MARK_PENDING:
-                    markPending(confirmed.engagementId(), confirmed.appliedVersion(), job);
-                    break;
-                case ALREADY_CURRENT:
-                    job.alreadyCurrent.incrementAndGet();
-                    break;
-                default:
-                    job.notInLineage.incrementAndGet();
-                    break;
+                case MARK_PENDING -> markPending(confirmed.engagementId(), confirmed.appliedVersion(), job);
+                case ALREADY_CURRENT -> job.alreadyCurrent.incrementAndGet();
+                default -> job.notInLineage.incrementAndGet();
             }
             idempotency.markCompleted(key);
 

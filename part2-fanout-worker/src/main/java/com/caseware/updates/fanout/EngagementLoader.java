@@ -17,21 +17,7 @@ public interface EngagementLoader {
             throws DownstreamUnavailableException, EngagementUnloadableException;
 
     /** Minimal projection of what a load tells us. */
-    final class LoadedEngagement {
-        private final String engagementId;
-        private final String templateId;
-        private final String appliedVersion;
-
-        public LoadedEngagement(String engagementId, String templateId, String appliedVersion) {
-            this.engagementId = engagementId;
-            this.templateId = templateId;
-            this.appliedVersion = appliedVersion;
-        }
-
-        public String engagementId() { return engagementId; }
-        public String templateId() { return templateId; }
-        public String appliedVersion() { return appliedVersion; }
-    }
+    record LoadedEngagement(String engagementId, String templateId, String appliedVersion) { }
 
     /** Transient: capacity exhausted, timeout, throttling, deploy. Retryable. */
     class DownstreamUnavailableException extends Exception {
